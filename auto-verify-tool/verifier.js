@@ -81,13 +81,15 @@ async function retryRequest(fn, maxRetries = 3, operationName = 'Request') {
 
 // ============== IMPROVEMENT: Weighted University Selection ==============
 function selectBestUniversity(preferUSA = true) {
-    // Filter USA universities first (higher success rate typically)
-    let candidates = preferUSA
-        ? UNIVERSITIES.filter(u => u.country === 'USA' && u.domain)
-        : UNIVERSITIES.filter(u => u.domain);
+    // STRICT: Only USA universities with .edu domains
+    let candidates = UNIVERSITIES.filter(u => 
+        u.country === 'USA' && 
+        u.domain && 
+        u.domain.endsWith('.edu')
+    );
 
     if (candidates.length === 0) {
-        candidates = UNIVERSITIES.filter(u => u.domain);
+        throw new Error('No USA .edu universities available');
     }
 
     // Sort by success rate (universities with no data get priority to test them)
@@ -366,6 +368,19 @@ async function verifyStudent(verificationUrl, serviceType = 'spotify') {
         }, 3, 'Submit student info');
 
         global.emitLog(`   └─ ✅ Step 3 completed: ${step1Response.data.currentStep}`);
+
+        // Check if verification was rejected by fraud rules
+        if (step1Response.data.currentStep === 'error') {
+            const errorIds = step1Response.data.errorIds || [];
+            global.emitLog(`   ❌ Verification rejected: ${errorIds.join(', ')}`);
+            verificationStats.recordFailure(university.name);
+            return {
+                success: false,
+                error: `Verification rejected: ${errorIds.join(', ')}`,
+                errorType: 'fraudRulesReject',
+                details: step1Response.data
+            };
+        }
 
         // Skip SSO if needed
         if (step1Response.data.currentStep === 'sso' || step1Response.data.currentStep === 'collectStudentPersonalInfo') {
