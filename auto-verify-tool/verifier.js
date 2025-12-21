@@ -141,6 +141,9 @@ const VALID_START_STATES = [
 const ERROR_TYPES = {
     INVALID_STEP: 'invalidStep',
     EXPIRED_LINK: 'expiredLink',
+    ALREADY_USED: 'alreadyUsed',
+    FRAUD_REJECTED: 'fraudRulesReject',
+    ALREADY_VERIFIED: 'alreadyVerified',
     ORGANIZATION_NOT_FOUND: 'organization_not_found',
     RATE_LIMITED: 'rateLimited',
     SSO_REQUIRED: 'ssoRequired'
@@ -154,12 +157,29 @@ async function checkLinkState(verificationId) {
         });
 
         const data = response.data;
+        const errorIds = data.errorIds || [];
+        
+        // Detect already-used or burned links
+        const isAlreadyUsed = data.currentStep === 'error' && errorIds.includes('fraudRulesReject');
+        const isAlreadyVerified = data.currentStep === 'success';
+        const isDocUploadPending = data.currentStep === 'docUpload';
+        const isPending = data.currentStep === 'pending';
+        
+        let burnedReason = null;
+        if (isAlreadyUsed) burnedReason = 'FRAUD_REJECTED - Link was flagged by fraud detection';
+        if (isAlreadyVerified) burnedReason = 'ALREADY_VERIFIED - This link was already successfully verified';
+        if (isDocUploadPending) burnedReason = 'DOC_UPLOAD_PENDING - Link already submitted info, waiting for document';
+        if (isPending) burnedReason = 'PENDING - Verification is pending review';
+        if (data.currentStep === 'error' && !isAlreadyUsed) burnedReason = `ERROR - ${errorIds.join(', ') || 'Unknown error'}`;
+        
         return {
             isValid: true,
             currentStep: data.currentStep,
             canProceed: VALID_START_STATES.includes(data.currentStep) || data.currentStep === 'sso',
             segment: data.segment,
-            errorIds: data.errorIds || [],
+            errorIds: errorIds,
+            isBurned: !!burnedReason,
+            burnedReason: burnedReason,
             raw: data
         };
     } catch (error) {
@@ -169,7 +189,9 @@ async function checkLinkState(verificationId) {
             currentStep: 'unknown',
             canProceed: false,
             error: error.message,
-            errorIds: []
+            errorIds: [],
+            isBurned: true,
+            burnedReason: 'INVALID - Link does not exist or has expired'
         };
     }
 }
@@ -275,12 +297,30 @@ async function verifyStudent(verificationUrl, serviceType = 'spotify') {
 
         if (!linkState.isValid) {
             global.emitLog('❌ Link is invalid or expired!');
+            global.emitLog(`   Reason: ${linkState.burnedReason || 'Unknown'}`);
             global.emitLog('💡 Solution: Get a new verification link from the registration page.');
             return {
                 success: false,
                 error: 'Invalid or expired verification link',
                 errorType: ERROR_TYPES.EXPIRED_LINK,
                 recovery: 'Get a new verification link from the registration page.'
+            };
+        }
+
+        // Check if link is already burned (used, verified, or error state)
+        if (linkState.isBurned) {
+            global.emitLog('🔥 Link is BURNED (already used)!');
+            global.emitLog(`   State: ${linkState.currentStep}`);
+            global.emitLog(`   Reason: ${linkState.burnedReason}`);
+            global.emitLog('');
+            global.emitLog('💡 This verification link cannot be used again.');
+            global.emitLog('💡 Solution: Go back to the original signup page and get a FRESH link.');
+            return {
+                success: false,
+                error: `Link already used: ${linkState.burnedReason}`,
+                errorType: ERROR_TYPES.ALREADY_USED,
+                currentStep: linkState.currentStep,
+                recovery: 'Get a new verification link - each link can only be used ONCE.'
             };
         }
 
@@ -440,12 +480,30 @@ async function verifyTeacher(verificationUrl) {
 
         if (!linkState.isValid) {
             global.emitLog('❌ Link is invalid or expired!');
+            global.emitLog(`   Reason: ${linkState.burnedReason || 'Unknown'}`);
             global.emitLog('💡 Solution: Get a new verification link from the registration page.');
             return {
                 success: false,
                 error: 'Invalid or expired verification link',
                 errorType: ERROR_TYPES.EXPIRED_LINK,
                 recovery: 'Get a new verification link from the registration page.'
+            };
+        }
+
+        // Check if link is already burned (used, verified, or error state)
+        if (linkState.isBurned) {
+            global.emitLog('🔥 Link is BURNED (already used)!');
+            global.emitLog(`   State: ${linkState.currentStep}`);
+            global.emitLog(`   Reason: ${linkState.burnedReason}`);
+            global.emitLog('');
+            global.emitLog('💡 This verification link cannot be used again.');
+            global.emitLog('💡 Solution: Go back to the original signup page and get a FRESH link.');
+            return {
+                success: false,
+                error: `Link already used: ${linkState.burnedReason}`,
+                errorType: ERROR_TYPES.ALREADY_USED,
+                currentStep: linkState.currentStep,
+                recovery: 'Get a new verification link - each link can only be used ONCE.'
             };
         }
 
@@ -593,12 +651,30 @@ async function verifyGPT(verificationUrl) {
 
         if (!linkState.isValid) {
             global.emitLog('❌ Link is invalid or expired!');
+            global.emitLog(`   Reason: ${linkState.burnedReason || 'Unknown'}`);
             global.emitLog('💡 Solution: Get a new verification link from the registration page.');
             return {
                 success: false,
                 error: 'Invalid or expired verification link',
                 errorType: ERROR_TYPES.EXPIRED_LINK,
                 recovery: 'Get a new verification link from the registration page.'
+            };
+        }
+
+        // Check if link is already burned (used, verified, or error state)
+        if (linkState.isBurned) {
+            global.emitLog('🔥 Link is BURNED (already used)!');
+            global.emitLog(`   State: ${linkState.currentStep}`);
+            global.emitLog(`   Reason: ${linkState.burnedReason}`);
+            global.emitLog('');
+            global.emitLog('💡 This verification link cannot be used again.');
+            global.emitLog('💡 Solution: Go back to the original signup page and get a FRESH link.');
+            return {
+                success: false,
+                error: `Link already used: ${linkState.burnedReason}`,
+                errorType: ERROR_TYPES.ALREADY_USED,
+                currentStep: linkState.currentStep,
+                recovery: 'Get a new verification link - each link can only be used ONCE.'
             };
         }
 

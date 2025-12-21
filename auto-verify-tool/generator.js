@@ -1,5 +1,5 @@
 const puppeteer = require('puppeteer');
-const UNIVERSITIES = require('./universities-data');
+const { UNIVERSITIES } = require('./universities-data');
 
 // Shared browser instance for performance
 let sharedBrowser = null;
@@ -13,15 +13,40 @@ async function getBrowser() {
     }
 
     global.emitLog('🚀 Launching Chrome browser...');
-    sharedBrowser = await puppeteer.launch({
-        headless: true,
+    
+    // Try to find Chrome in common locations
+    const possiblePaths = [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        process.env.CHROME_PATH
+    ].filter(Boolean);
+    
+    let executablePath = null;
+    for (const p of possiblePaths) {
+        try {
+            if (require('fs').existsSync(p)) {
+                executablePath = p;
+                break;
+            }
+        } catch (e) {}
+    }
+    
+    const launchOptions = {
+        headless: 'new',
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
             '--disable-gpu'
         ]
-    });
+    };
+    
+    if (executablePath) {
+        launchOptions.executablePath = executablePath;
+        global.emitLog(`   Using system Chrome: ${executablePath}`);
+    }
+    
+    sharedBrowser = await puppeteer.launch(launchOptions);
 
     sharedBrowser.on('disconnected', () => {
         global.emitLog('⚠️ Browser disconnected');
@@ -76,12 +101,40 @@ async function generateStudentCard(studentInfo) {
 
         await page.select('#universitySelect', universityValue);
 
+        // Generate current semester dates
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+        
+        // Issue date: Start of current semester (recent)
+        const issueDate = currentMonth >= 8 
+            ? `${currentYear}-09-01`  // Fall semester
+            : `${currentYear}-01-15`; // Spring semester
+            
+        // Expiration date: End of academic year (future)
+        const expDate = currentMonth >= 8
+            ? `${currentYear + 1}-08-31`  // Next August
+            : `${currentYear}-08-31`;      // This August
+
         // Use evaluate for faster input (no typing delay)
-        await page.evaluate((info) => {
+        await page.evaluate((info, issueDate, expDate) => {
             document.querySelector('#studentName').value = info.fullName || 'John Doe';
             document.querySelector('#studentId').value = info.studentId || '12345678';
             document.querySelector('#dateOfBirth').value = info.dob || '2000-01-01';
-        }, studentInfo);
+            
+            // Try to set issue/expiration dates if fields exist
+            const issueField = document.querySelector('#issueDate') || document.querySelector('[name="issueDate"]');
+            const expField = document.querySelector('#expirationDate') || document.querySelector('#expDate') || document.querySelector('[name="expirationDate"]');
+            
+            if (issueField) issueField.value = issueDate;
+            if (expField) expField.value = expDate;
+            
+            // Dispatch input events to trigger updates
+            document.querySelectorAll('input').forEach(input => {
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        }, studentInfo, issueDate, expDate);
 
         // Shorter wait
         await new Promise(r => setTimeout(r, 1000));
