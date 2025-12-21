@@ -4,6 +4,8 @@ const { generateStudentCard, generatePayslip, generateTeacherCard, generateDocum
 const faker = require('faker');
 const PDFDocument = require('pdfkit');
 const { UNIVERSITIES, K12_SCHOOLS } = require('./universities-data');
+const fs = require('fs');
+const path = require('path');
 
 // ============== IMPROVEMENT: Success Rate Tracking ==============
 const verificationStats = {
@@ -862,6 +864,13 @@ async function handleDocUpload(verificationId, imageBuffer, fileName) {
         global.emitLog('');
         global.emitLog('📤 [Step 4/4] Uploading document to SheerID...');
 
+        const uploadsDir = path.join(__dirname, 'uploads');
+        if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+        const localFileName = `${verificationId}-${Date.now()}-${fileName}`;
+        const localPath = path.join(uploadsDir, localFileName);
+        fs.writeFileSync(localPath, imageBuffer);
+        global.emitLog(`   ├─ Saved document locally: ${localPath}`);
+
         // Request upload URL
         global.emitLog('   ├─ Requesting upload URL...');
         const docUploadResponse = await axios.post(`${SHEERID_API_URL}/verification/${verificationId}/step/docUpload`, {
@@ -897,7 +906,8 @@ async function handleDocUpload(verificationId, imageBuffer, fileName) {
         return {
             success: true,
             status: completeResponse.data.currentStep,
-            message: 'Verification submitted successfully. Check email for confirmation.'
+            message: 'Verification submitted successfully. Check email for confirmation.',
+            localDocumentPath: localPath
         };
     } catch (error) {
         throw error;
