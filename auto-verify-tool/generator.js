@@ -1,5 +1,9 @@
 const puppeteer = require('puppeteer');
 const { UNIVERSITIES } = require('./universities-data');
+const localGenerator = require('./local-generator');
+
+// Flag to use local generation when external sites are down
+let useLocalGenerator = false;
 
 // Shared browser instance for performance
 let sharedBrowser = null;
@@ -64,16 +68,24 @@ async function closeBrowser() {
 }
 
 async function generateStudentCard(studentInfo) {
-    global.emitLog('📸 Generating student card...');
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-
-    // Find university object to get country
-    const universityObj = UNIVERSITIES.find(u => u.name === studentInfo.university);
-    const country = universityObj ? universityObj.country : 'USA'; // Default to USA
-    const universityName = universityObj ? universityObj.name : studentInfo.university;
-
+    // Check if we should use local generator (faster, no external dependency)
+    if (useLocalGenerator) {
+        global.emitLog?.('📸 Using local generator for student card...');
+        return localGenerator.generateStudentCard(studentInfo);
+    }
+    
+    global.emitLog?.('📸 Generating student card...');
+    let page = null;
+    
     try {
+        const browser = await getBrowser();
+        page = await browser.newPage();
+
+        // Find university object to get country
+        const universityObj = UNIVERSITIES.find(u => u.name === studentInfo.university);
+        const country = universityObj ? universityObj.country : 'USA'; // Default to USA
+        const universityName = universityObj ? universityObj.name : studentInfo.university;
+
         await page.goto('https://thanhnguyxn.github.io/student-card-generator/', {
             waitUntil: 'domcontentloaded',
             timeout: 30000
@@ -143,29 +155,42 @@ async function generateStudentCard(studentInfo) {
         if (!cardElement) throw new Error('Card preview not found');
 
         const imageBuffer = await cardElement.screenshot({ type: 'png', encoding: 'binary' });
-        global.emitLog('✅ Student card generated');
+        global.emitLog?.('✅ Student card generated');
         return imageBuffer;
 
-    } finally {
+    } catch (error) {
+        global.emitLog?.(`⚠️ External generator failed: ${error.message}`);
+        global.emitLog?.('📸 Falling back to local generator...');
+        useLocalGenerator = true;
         if (page) await page.close();
+        return localGenerator.generateStudentCard(studentInfo);
+    } finally {
+        if (page && !page.isClosed()) await page.close();
         // Do not close browser here
     }
 }
 
 async function generatePayslip(teacherInfo) {
-    global.emitLog('📸 Generating payslip...');
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-
-    // School rotation - 14 US universities
-    // School rotation - use centralized list
-    const universities = UNIVERSITIES.map(u => u.name);
-
-    // Select university: Use provided one, or random from list
-    const selectedUniversity = teacherInfo.university || universities[Math.floor(Math.random() * universities.length)];
-    global.emitLog(`🎓 Payslip university: ${selectedUniversity}`);
-
+    // Check if we should use local generator
+    if (useLocalGenerator) {
+        global.emitLog?.('📸 Using local generator for payslip...');
+        return localGenerator.generatePayslip(teacherInfo);
+    }
+    
+    global.emitLog?.('📸 Generating payslip...');
+    let page = null;
+    
     try {
+        const browser = await getBrowser();
+        page = await browser.newPage();
+
+        // School rotation - use centralized list
+        const universities = UNIVERSITIES.map(u => u.name);
+
+        // Select university: Use provided one, or random from list
+        const selectedUniversity = teacherInfo.university || universities[Math.floor(Math.random() * universities.length)];
+        global.emitLog?.(`🎓 Payslip university: ${selectedUniversity}`);
+
         await page.goto('https://thanhnguyxn.github.io/payslip-generator/', {
             waitUntil: 'domcontentloaded',
             timeout: 30000
@@ -200,28 +225,41 @@ async function generatePayslip(teacherInfo) {
         if (!cardElement) throw new Error('Payslip container not found');
 
         const imageBuffer = await cardElement.screenshot({ type: 'png', encoding: 'binary' });
-        global.emitLog('✅ Payslip generated');
+        global.emitLog?.('✅ Payslip generated');
         return imageBuffer;
 
+    } catch (error) {
+        global.emitLog?.(`⚠️ External payslip generator failed: ${error.message}`);
+        global.emitLog?.('📸 Falling back to local generator...');
+        useLocalGenerator = true;
+        if (page && !page.isClosed()) await page.close();
+        return localGenerator.generatePayslip(teacherInfo);
     } finally {
-        await page.close();
+        if (page && !page.isClosed()) await page.close();
     }
 }
 
 async function generateTeacherCard(teacherInfo, options = {}) {
-    global.emitLog('📸 Generating Faculty ID Card...');
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-
-    // School rotation - 14 US universities
-    // School rotation - use centralized list
-    const universities = UNIVERSITIES.map(u => u.name);
-
-    // Select university: Use provided one, or random from list
-    const selectedUniversity = teacherInfo.university || universities[Math.floor(Math.random() * universities.length)];
-    global.emitLog(`🎓 Selected university: ${selectedUniversity}`);
-
+    // Check if we should use local generator
+    if (useLocalGenerator) {
+        global.emitLog?.('📸 Using local generator for Faculty ID Card...');
+        return localGenerator.generateTeacherCard(teacherInfo, options);
+    }
+    
+    global.emitLog?.('📸 Generating Faculty ID Card...');
+    let page = null;
+    
     try {
+        const browser = await getBrowser();
+        page = await browser.newPage();
+
+        // School rotation - use centralized list
+        const universities = UNIVERSITIES.map(u => u.name);
+
+        // Select university: Use provided one, or random from list
+        const selectedUniversity = teacherInfo.university || universities[Math.floor(Math.random() * universities.length)];
+        global.emitLog?.(`🎓 Selected university: ${selectedUniversity}`);
+
         await page.goto('https://thanhnguyxn.github.io/payslip-generator/', {
             waitUntil: 'domcontentloaded',
             timeout: 30000
@@ -300,11 +338,17 @@ async function generateTeacherCard(teacherInfo, options = {}) {
         if (!cardElement) throw new Error('Faculty ID Card not found');
 
         const imageBuffer = await cardElement.screenshot({ type: 'png', encoding: 'binary' });
-        global.emitLog('✅ Faculty ID Card generated');
+        global.emitLog?.('✅ Faculty ID Card generated');
         return imageBuffer;
 
+    } catch (error) {
+        global.emitLog?.(`⚠️ External teacher card generator failed: ${error.message}`);
+        global.emitLog?.('📸 Falling back to local generator...');
+        useLocalGenerator = true;
+        if (page && !page.isClosed()) await page.close();
+        return localGenerator.generateTeacherCard(teacherInfo, options);
     } finally {
-        await page.close();
+        if (page && !page.isClosed()) await page.close();
     }
 }
 
