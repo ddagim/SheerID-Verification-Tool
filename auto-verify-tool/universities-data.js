@@ -449,7 +449,18 @@ const UNIVERSITIES = [
 // NOTE: Individual high schools with type "K12" work better than districts
 // These schools were discovered using the K12 Tips methodology from README
 // All verified via SheerID API: orgsearch.sheerid.net/rest/organization/v2/search?type=K12
-const K12_SCHOOLS = [
+
+// Helper: add computed fields to K12 schools
+function enrichK12Schools(schools) {
+    return schools.map(s => ({
+        ...s,
+        idExtended: s.idExtended || String(s.sheerId),
+        domain: s.domain || 'schools.nyc.gov',
+        country: s.country || 'USA'
+    }));
+}
+
+const K12_SCHOOLS_RAW = [
     // ============================================
     // NYC SPECIALIZED HIGH SCHOOLS (8 schools)
     // ============================================
@@ -676,6 +687,8 @@ const K12_SCHOOLS = [
     { name: "Sammamish Senior High School", sheerId: 269532, type: "K12", city: "Bellevue, WA" },
     { name: "Bellevue Christian School", sheerId: 269510, type: "K12", city: "Bellevue, WA" }
 ];
+
+const K12_SCHOOLS = enrichK12Schools(K12_SCHOOLS_RAW);
 
 module.exports = { UNIVERSITIES, K12_SCHOOLS };
 

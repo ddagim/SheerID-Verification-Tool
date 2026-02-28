@@ -3,7 +3,8 @@ const { UNIVERSITIES } = require('./universities-data');
 const localGenerator = require('./local-generator');
 
 // Flag to use local generation when external sites are down
-let useLocalGenerator = false;
+// Default to true in container/CI environments where Chrome may not be available
+let useLocalGenerator = !process.env.USE_PUPPETEER;
 
 // Shared browser instance for performance
 let sharedBrowser = null;

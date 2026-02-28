@@ -626,9 +626,9 @@
     const statusDiv = document.getElementById('status');
 
     // ⚠️ CONFIGURATION:
-    // For Local Use: 'http://localhost:3000'
-    // For Deployment: Azure Web App URL
-    const BACKEND_URL = 'http://localhost:3000';
+    // Uses relative URL when served from the same backend server
+    // For separate deployment, set to your backend URL (e.g., 'http://localhost:3000')
+    const BACKEND_URL = window.location.origin;
 
 
     // Log panel elements

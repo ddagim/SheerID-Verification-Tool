@@ -1,6 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const path = require('path');
 const EventEmitter = require('events');
 const { verifySheerID } = require('./verifier');
 
@@ -26,10 +27,13 @@ global.emitLog = (message, type = 'info') => {
 app.use(cors());
 app.use(bodyParser.json());
 
-// Health check
-app.get('/', (req, res) => {
+// Health check (before static to ensure API works)
+app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'SheerID Verification API is running' });
 });
+
+// Serve frontend
+app.use(express.static(path.join(__dirname, '..')));
 
 // SSE endpoint with session filtering
 app.get('/api/logs', (req, res) => {

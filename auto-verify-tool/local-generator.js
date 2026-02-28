@@ -1,10 +1,10 @@
 /**
  * Local Document Generator
- * Generates student cards and payslips locally without external dependencies
- * Uses PDFKit for document generation
+ * Generates student cards, payslips, and teacher cards as PNG images
+ * Uses node-canvas for proper PNG output
  */
 
-const PDFDocument = require('pdfkit');
+const { createCanvas } = require('canvas');
 const fs = require('fs');
 const path = require('path');
 
@@ -34,381 +34,538 @@ function getUniversityColor(universityName) {
  * Generate a student ID card as PNG buffer
  */
 async function generateStudentCard(studentInfo) {
-    global.emitLog?.('📸 Generating student card locally...');
+    global.emitLog?.('📸 Generating student card locally (PNG)...');
     
     const { UNIVERSITIES } = require('./universities-data');
     const universityObj = UNIVERSITIES.find(u => u.name === studentInfo.university);
     const universityName = universityObj?.name || studentInfo.university || 'State University';
     const universityColor = getUniversityColor(universityName);
+    const shortName = universityObj?.shortName || universityName.split(' ')[0];
     
-    return new Promise((resolve, reject) => {
-        try {
-            // Create PDF document
-            const doc = new PDFDocument({
-                size: [350, 220], // ID card size
-                margins: { top: 10, bottom: 10, left: 10, right: 10 }
-            });
-            
-            const chunks = [];
-            doc.on('data', chunk => chunks.push(chunk));
-            doc.on('end', () => {
-                const pdfBuffer = Buffer.concat(chunks);
-                global.emitLog?.(`✅ Student card generated (PDF: ${(pdfBuffer.length / 1024).toFixed(2)}KB)`);
-                resolve(pdfBuffer);
-            });
-            doc.on('error', reject);
-            
-            // Header bar with university color
-            doc.rect(0, 0, 350, 50).fill(universityColor);
-            
-            // University name in header
-            doc.fontSize(14)
-               .fill('#FFFFFF')
-               .text(universityName.toUpperCase(), 10, 15, {
-                   width: 330,
-                   align: 'center'
-               });
-            
-            // "STUDENT ID" label
-            doc.fontSize(8)
-               .text('STUDENT IDENTIFICATION CARD', 10, 35, {
-                   width: 330,
-                   align: 'center'
-               });
-            
-            // Photo placeholder (left side)
-            doc.rect(15, 60, 80, 100).fill('#E5E7EB');
-            doc.fontSize(8)
-               .fill('#6B7280')
-               .text('PHOTO', 40, 105);
-            
-            // Student info (right side)
-            const infoX = 110;
-            let infoY = 65;
-            
-            doc.fontSize(10).fill('#1F2937');
-            
-            doc.text('NAME:', infoX, infoY);
-            doc.font('Helvetica-Bold').text(studentInfo.fullName || 'John Doe', infoX + 45, infoY);
-            doc.font('Helvetica');
-            
-            infoY += 20;
-            doc.text('ID:', infoX, infoY);
-            doc.font('Helvetica-Bold').text(studentInfo.studentId || '12345678', infoX + 45, infoY);
-            doc.font('Helvetica');
-            
-            infoY += 20;
-            doc.text('DOB:', infoX, infoY);
-            doc.text(studentInfo.dob || '2002-01-01', infoX + 45, infoY);
-            
-            infoY += 20;
-            doc.text('STATUS:', infoX, infoY);
-            doc.fill('#059669').text('ACTIVE STUDENT', infoX + 45, infoY);
-            doc.fill('#1F2937');
-            
-            // Valid dates
-            const now = new Date();
-            const currentYear = now.getFullYear();
-            const issueDate = `${currentYear}-09-01`;
-            const expDate = `${currentYear + 1}-08-31`;
-            
-            infoY += 20;
-            doc.fontSize(8).text(`VALID: ${issueDate} to ${expDate}`, infoX, infoY);
-            
-            // Barcode area at bottom
-            doc.rect(15, 175, 320, 35).fill('#F3F4F6');
-            
-            // Simulated barcode lines
-            let barcodeX = 25;
-            for (let i = 0; i < 40; i++) {
-                const width = Math.random() > 0.5 ? 2 : 4;
-                const height = 20 + Math.random() * 5;
-                doc.rect(barcodeX, 180, width, height).fill('#000000');
-                barcodeX += width + 2 + Math.floor(Math.random() * 3);
-                if (barcodeX > 320) break;
-            }
-            
-            // Barcode number
-            doc.fontSize(7)
-               .fill('#374151')
-               .text(generateBarcode(), 15, 202, { width: 320, align: 'center' });
-            
-            doc.end();
-        } catch (error) {
-            reject(error);
-        }
-    });
+    // Card dimensions (credit card ratio ~3.375:2.125 at 2x)
+    const W = 700, H = 440;
+    const canvas = createCanvas(W, H);
+    const ctx = canvas.getContext('2d');
+    
+    // Background - white card
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, W, H);
+    
+    // Header bar with university color
+    ctx.fillStyle = universityColor;
+    ctx.fillRect(0, 0, W, 80);
+    
+    // University name in header
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 22px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(universityName.toUpperCase(), W / 2, 35);
+    
+    // Sub-header
+    ctx.font = '13px Arial, sans-serif';
+    ctx.fillText('STUDENT IDENTIFICATION CARD', W / 2, 60);
+    
+    // Thin accent line under header
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(0, 80, W, 4);
+    
+    // Photo placeholder (left side) - gray box with silhouette look
+    const photoX = 30, photoY = 100, photoW = 130, photoH = 170;
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillRect(photoX, photoY, photoW, photoH);
+    ctx.strokeStyle = '#CBD5E1';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(photoX, photoY, photoW, photoH);
+    
+    // Simple silhouette in photo area
+    ctx.fillStyle = '#94A3B8';
+    ctx.beginPath();
+    ctx.arc(photoX + photoW/2, photoY + 55, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(photoX + photoW/2, photoY + 140, 45, 35, 0, Math.PI, 0, true);
+    ctx.fill();
+    
+    // Student info (right side)
+    const infoX = 190;
+    let infoY = 115;
+    ctx.textAlign = 'left';
+    
+    // Name
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('FULL NAME', infoX, infoY);
+    infoY += 18;
+    ctx.fillStyle = '#1E293B';
+    ctx.font = 'bold 18px Arial, sans-serif';
+    ctx.fillText(studentInfo.fullName || 'John Doe', infoX, infoY);
+    
+    // Student ID
+    infoY += 35;
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('STUDENT ID', infoX, infoY);
+    infoY += 18;
+    ctx.fillStyle = '#1E293B';
+    ctx.font = 'bold 16px Arial, sans-serif';
+    ctx.fillText(studentInfo.studentId || '12345678', infoX, infoY);
+    
+    // DOB
+    infoY += 35;
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('DATE OF BIRTH', infoX, infoY);
+    infoY += 18;
+    ctx.fillStyle = '#1E293B';
+    ctx.font = '15px Arial, sans-serif';
+    ctx.fillText(studentInfo.dob || '2002-01-01', infoX, infoY);
+    
+    // Department (right column)
+    const col2X = 440;
+    let col2Y = 115;
+    const depts = universityObj?.departments || ['Computer Science'];
+    const dept = depts[Math.floor(Math.random() * depts.length)];
+    
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('DEPARTMENT', col2X, col2Y);
+    col2Y += 18;
+    ctx.fillStyle = '#1E293B';
+    ctx.font = '15px Arial, sans-serif';
+    ctx.fillText(dept, col2X, col2Y);
+    
+    // Status
+    col2Y += 35;
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('STATUS', col2X, col2Y);
+    col2Y += 18;
+    ctx.fillStyle = '#059669';
+    ctx.font = 'bold 15px Arial, sans-serif';
+    ctx.fillText('ACTIVE', col2X, col2Y);
+    
+    // Green dot next to active
+    ctx.beginPath();
+    ctx.arc(col2X + 60, col2Y - 5, 5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Valid dates
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const issueDate = currentMonth >= 8 ? `${currentYear}-09-01` : `${currentYear}-01-15`;
+    const expDate = currentMonth >= 8 ? `${currentYear + 1}-08-31` : `${currentYear}-08-31`;
+    
+    col2Y += 35;
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('VALID PERIOD', col2X, col2Y);
+    col2Y += 18;
+    ctx.fillStyle = '#1E293B';
+    ctx.font = '14px Arial, sans-serif';
+    ctx.fillText(`${issueDate} — ${expDate}`, col2X, col2Y);
+    
+    // Bottom section - barcode area
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fillRect(0, 340, W, 100);
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillRect(0, 340, W, 1);
+    
+    // Simulated barcode
+    let barcodeX = 50;
+    const barcodeY = 358;
+    for (let i = 0; i < 60; i++) {
+        const w = Math.random() > 0.5 ? 2 : 4;
+        const h = 40 + Math.random() * 8;
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(barcodeX, barcodeY, w, h);
+        barcodeX += w + 1 + Math.floor(Math.random() * 3);
+        if (barcodeX > 350) break;
+    }
+    
+    // Barcode number
+    const barcodeNum = generateBarcode();
+    ctx.fillStyle = '#475569';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(barcodeNum, 200, 418);
+    
+    // University short logo text (right side of barcode)
+    ctx.fillStyle = universityColor;
+    ctx.font = 'bold 28px Arial, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(shortName.toUpperCase(), W - 40, 390);
+    ctx.font = '11px Arial, sans-serif';
+    ctx.fillStyle = '#64748B';
+    ctx.fillText(universityObj?.address || '', W - 40, 415);
+    
+    const pngBuffer = canvas.toBuffer('image/png');
+    global.emitLog?.(`✅ Student card generated (PNG: ${(pngBuffer.length / 1024).toFixed(2)}KB)`);
+    return pngBuffer;
 }
 
 /**
  * Generate a payslip as PNG buffer
  */
 async function generatePayslip(teacherInfo) {
-    global.emitLog?.('📸 Generating payslip locally...');
-    
-    const { UNIVERSITIES } = require('./universities-data');
-    const universities = UNIVERSITIES.map(u => u.name);
-    const selectedUniversity = teacherInfo.university || universities[Math.floor(Math.random() * universities.length)];
-    
-    global.emitLog?.(`🎓 Payslip for: ${selectedUniversity}`);
-    
-    return new Promise((resolve, reject) => {
-        try {
-            const doc = new PDFDocument({
-                size: 'A4',
-                margins: { top: 50, bottom: 50, left: 50, right: 50 }
-            });
-            
-            const chunks = [];
-            doc.on('data', chunk => chunks.push(chunk));
-            doc.on('end', () => {
-                const pdfBuffer = Buffer.concat(chunks);
-                global.emitLog?.(`✅ Payslip generated (PDF: ${(pdfBuffer.length / 1024).toFixed(2)}KB)`);
-                resolve(pdfBuffer);
-            });
-            doc.on('error', reject);
-            
-            // Header
-            doc.fontSize(18)
-               .font('Helvetica-Bold')
-               .text(selectedUniversity.toUpperCase(), { align: 'center' });
-            
-            doc.moveDown(0.5);
-            doc.fontSize(14)
-               .font('Helvetica')
-               .text('EMPLOYEE PAY STATEMENT', { align: 'center' });
-            
-            doc.moveDown();
-            doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke('#CCCCCC');
-            doc.moveDown();
-            
-            // Pay period
-            const now = new Date();
-            const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-            
-            doc.fontSize(10);
-            doc.text(`Pay Period: ${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`);
-            doc.text(`Pay Date: ${now.toISOString().split('T')[0]}`);
-            
-            doc.moveDown();
-            
-            // Employee info box
-            doc.rect(50, doc.y, 495, 80).stroke('#CCCCCC');
-            const employeeY = doc.y + 10;
-            
-            doc.text('EMPLOYEE INFORMATION', 60, employeeY);
-            doc.moveDown(0.5);
-            doc.text(`Name: ${teacherInfo.fullName || 'Jane Doe'}`, 60, employeeY + 20);
-            doc.text(`Employee ID: ${teacherInfo.employeeId || 'E-1234567'}`, 60, employeeY + 35);
-            doc.text('Position: Professor', 60, employeeY + 50);
-            doc.text('Department: Academic Affairs', 300, employeeY + 20);
-            doc.text('Employment Type: Full-Time', 300, employeeY + 35);
-            
-            doc.y = employeeY + 90;
-            
-            // Earnings table
-            doc.moveDown();
-            doc.font('Helvetica-Bold').text('EARNINGS', 50, doc.y);
-            doc.moveDown(0.3);
-            
-            const tableTop = doc.y;
-            const col1 = 50, col2 = 250, col3 = 350, col4 = 450;
-            
-            // Table header
-            doc.rect(50, tableTop, 495, 20).fill('#E5E7EB');
-            doc.fill('#000000').font('Helvetica-Bold').fontSize(9);
-            doc.text('Description', col1 + 5, tableTop + 5);
-            doc.text('Hours', col2, tableTop + 5);
-            doc.text('Rate', col3, tableTop + 5);
-            doc.text('Amount', col4, tableTop + 5);
-            
-            // Table rows
-            doc.font('Helvetica').fontSize(9);
-            let rowY = tableTop + 25;
-            
-            const baseSalary = (4500 + Math.random() * 2000).toFixed(2);
-            
-            doc.text('Regular Salary', col1 + 5, rowY);
-            doc.text('80.00', col2, rowY);
-            doc.text(`$${(baseSalary / 80).toFixed(2)}`, col3, rowY);
-            doc.text(`$${baseSalary}`, col4, rowY);
-            
-            rowY += 18;
-            const benefitsAllowance = (200 + Math.random() * 100).toFixed(2);
-            doc.text('Benefits Allowance', col1 + 5, rowY);
-            doc.text('-', col2, rowY);
-            doc.text('-', col3, rowY);
-            doc.text(`$${benefitsAllowance}`, col4, rowY);
-            
-            // Gross total
-            rowY += 25;
-            const grossPay = (parseFloat(baseSalary) + parseFloat(benefitsAllowance)).toFixed(2);
-            doc.moveTo(50, rowY - 5).lineTo(545, rowY - 5).stroke('#CCCCCC');
-            doc.font('Helvetica-Bold');
-            doc.text('GROSS PAY', col1 + 5, rowY);
-            doc.text(`$${grossPay}`, col4, rowY);
-            
-            // Deductions
-            doc.font('Helvetica-Bold').text('DEDUCTIONS', 50, rowY + 40);
-            rowY += 60;
-            
-            doc.rect(50, rowY, 495, 20).fill('#E5E7EB');
-            doc.fill('#000000');
-            doc.text('Description', col1 + 5, rowY + 5);
-            doc.text('Amount', col4, rowY + 5);
-            
-            doc.font('Helvetica').fontSize(9);
-            rowY += 25;
-            
-            const federalTax = (parseFloat(grossPay) * 0.22).toFixed(2);
-            doc.text('Federal Income Tax', col1 + 5, rowY);
-            doc.text(`$${federalTax}`, col4, rowY);
-            
-            rowY += 18;
-            const stateTax = (parseFloat(grossPay) * 0.05).toFixed(2);
-            doc.text('State Income Tax', col1 + 5, rowY);
-            doc.text(`$${stateTax}`, col4, rowY);
-            
-            rowY += 18;
-            const socialSecurity = (parseFloat(grossPay) * 0.062).toFixed(2);
-            doc.text('Social Security', col1 + 5, rowY);
-            doc.text(`$${socialSecurity}`, col4, rowY);
-            
-            rowY += 18;
-            const medicare = (parseFloat(grossPay) * 0.0145).toFixed(2);
-            doc.text('Medicare', col1 + 5, rowY);
-            doc.text(`$${medicare}`, col4, rowY);
-            
-            // Net pay
-            rowY += 30;
-            const totalDeductions = (parseFloat(federalTax) + parseFloat(stateTax) + parseFloat(socialSecurity) + parseFloat(medicare)).toFixed(2);
-            const netPay = (parseFloat(grossPay) - parseFloat(totalDeductions)).toFixed(2);
-            
-            doc.moveTo(50, rowY - 5).lineTo(545, rowY - 5).stroke('#CCCCCC');
-            doc.font('Helvetica-Bold');
-            doc.text('TOTAL DEDUCTIONS', col1 + 5, rowY);
-            doc.text(`$${totalDeductions}`, col4, rowY);
-            
-            rowY += 25;
-            doc.rect(50, rowY - 5, 495, 25).fill('#E5E7EB');
-            doc.fill('#000000').fontSize(11);
-            doc.text('NET PAY', col1 + 5, rowY);
-            doc.text(`$${netPay}`, col4, rowY);
-            
-            // Footer
-            doc.fontSize(8).font('Helvetica');
-            doc.text('This is an official pay statement. Please retain for your records.', 50, 750, { align: 'center' });
-            doc.text(`Document ID: ${generateBarcode()}`, { align: 'center' });
-            
-            doc.end();
-        } catch (error) {
-            reject(error);
-        }
-    });
-}
-
-/**
- * Generate a teacher ID card
- */
-async function generateTeacherCard(teacherInfo, options = {}) {
-    global.emitLog?.('📸 Generating Faculty ID Card locally...');
+    global.emitLog?.('📸 Generating payslip locally (PNG)...');
     
     const { UNIVERSITIES } = require('./universities-data');
     const universities = UNIVERSITIES.map(u => u.name);
     const selectedUniversity = teacherInfo.university || universities[Math.floor(Math.random() * universities.length)];
     const universityColor = getUniversityColor(selectedUniversity);
     
+    global.emitLog?.(`🎓 Payslip for: ${selectedUniversity}`);
+    
+    const W = 800, H = 1050;
+    const canvas = createCanvas(W, H);
+    const ctx = canvas.getContext('2d');
+    
+    // White background
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, W, H);
+    
+    // Header
+    ctx.fillStyle = universityColor;
+    ctx.fillRect(0, 0, W, 70);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 22px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(selectedUniversity.toUpperCase(), W / 2, 30);
+    ctx.font = '14px Arial, sans-serif';
+    ctx.fillText('EMPLOYEE PAY STATEMENT', W / 2, 55);
+    
+    // Line separator
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(0, 70, W, 3);
+    
+    ctx.textAlign = 'left';
+    let y = 100;
+    
+    // Pay period
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    
+    ctx.fillStyle = '#475569';
+    ctx.font = '13px Arial, sans-serif';
+    ctx.fillText(`Pay Period: ${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]}`, 40, y);
+    ctx.fillText(`Pay Date: ${now.toISOString().split('T')[0]}`, 500, y);
+    y += 30;
+    
+    // Employee info box
+    ctx.strokeStyle = '#CBD5E1';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(40, y, W - 80, 90);
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fillRect(41, y + 1, W - 82, 24);
+    
+    ctx.fillStyle = '#1E293B';
+    ctx.font = 'bold 13px Arial, sans-serif';
+    ctx.fillText('EMPLOYEE INFORMATION', 55, y + 17);
+    
+    ctx.font = '13px Arial, sans-serif';
+    ctx.fillStyle = '#334155';
+    ctx.fillText(`Name: ${teacherInfo.fullName || 'Jane Doe'}`, 55, y + 45);
+    ctx.fillText(`Employee ID: ${teacherInfo.employeeId || 'E-1234567'}`, 55, y + 65);
+    ctx.fillText('Position: Professor', 55, y + 85);
+    ctx.fillText('Department: Academic Affairs', 420, y + 45);
+    ctx.fillText('Employment Type: Full-Time', 420, y + 65);
+    
+    y += 115;
+    
+    // Earnings header
+    ctx.fillStyle = '#1E293B';
+    ctx.font = 'bold 14px Arial, sans-serif';
+    ctx.fillText('EARNINGS', 40, y);
+    y += 20;
+    
+    // Table helper
+    const col1 = 40, col2 = 350, col3 = 500, col4 = 650;
+    
+    function drawTableHeader(yPos) {
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(40, yPos, W - 80, 22);
+        ctx.fillStyle = '#1E293B';
+        ctx.font = 'bold 11px Arial, sans-serif';
+        ctx.fillText('Description', col1 + 10, yPos + 15);
+        ctx.fillText('Hours', col2, yPos + 15);
+        ctx.fillText('Rate', col3, yPos + 15);
+        ctx.fillText('Amount', col4, yPos + 15);
+        return yPos + 28;
+    }
+    
+    y = drawTableHeader(y);
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillStyle = '#334155';
+    
+    const baseSalary = (4500 + Math.random() * 2000).toFixed(2);
+    ctx.fillText('Regular Salary', col1 + 10, y + 5);
+    ctx.fillText('80.00', col2, y + 5);
+    ctx.fillText(`$${(baseSalary / 80).toFixed(2)}`, col3, y + 5);
+    ctx.fillText(`$${baseSalary}`, col4, y + 5);
+    y += 22;
+    
+    const benefitsAllowance = (200 + Math.random() * 100).toFixed(2);
+    ctx.fillText('Benefits Allowance', col1 + 10, y + 5);
+    ctx.fillText('-', col2, y + 5);
+    ctx.fillText('-', col3, y + 5);
+    ctx.fillText(`$${benefitsAllowance}`, col4, y + 5);
+    y += 30;
+    
+    // Gross total line
+    const grossPay = (parseFloat(baseSalary) + parseFloat(benefitsAllowance)).toFixed(2);
+    ctx.strokeStyle = '#CBD5E1';
+    ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(W - 40, y); ctx.stroke();
+    y += 18;
+    ctx.font = 'bold 13px Arial, sans-serif';
+    ctx.fillStyle = '#1E293B';
+    ctx.fillText('GROSS PAY', col1 + 10, y);
+    ctx.fillText(`$${grossPay}`, col4, y);
+    y += 40;
+    
+    // Deductions header
+    ctx.font = 'bold 14px Arial, sans-serif';
+    ctx.fillText('DEDUCTIONS', 40, y);
+    y += 20;
+    
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillRect(40, y, W - 80, 22);
+    ctx.fillStyle = '#1E293B';
+    ctx.font = 'bold 11px Arial, sans-serif';
+    ctx.fillText('Description', col1 + 10, y + 15);
+    ctx.fillText('Amount', col4, y + 15);
+    y += 28;
+    
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillStyle = '#334155';
+    
+    const federalTax = (parseFloat(grossPay) * 0.22).toFixed(2);
+    ctx.fillText('Federal Income Tax', col1 + 10, y + 5);
+    ctx.fillText(`$${federalTax}`, col4, y + 5);
+    y += 22;
+    
+    const stateTax = (parseFloat(grossPay) * 0.05).toFixed(2);
+    ctx.fillText('State Income Tax', col1 + 10, y + 5);
+    ctx.fillText(`$${stateTax}`, col4, y + 5);
+    y += 22;
+    
+    const socialSecurity = (parseFloat(grossPay) * 0.062).toFixed(2);
+    ctx.fillText('Social Security (FICA)', col1 + 10, y + 5);
+    ctx.fillText(`$${socialSecurity}`, col4, y + 5);
+    y += 22;
+    
+    const medicare = (parseFloat(grossPay) * 0.0145).toFixed(2);
+    ctx.fillText('Medicare', col1 + 10, y + 5);
+    ctx.fillText(`$${medicare}`, col4, y + 5);
+    y += 22;
+    
+    const retirement = (parseFloat(grossPay) * 0.06).toFixed(2);
+    ctx.fillText('Retirement Plan (403b)', col1 + 10, y + 5);
+    ctx.fillText(`$${retirement}`, col4, y + 5);
+    y += 30;
+    
+    // Net pay
+    const totalDeductions = (parseFloat(federalTax) + parseFloat(stateTax) + parseFloat(socialSecurity) + parseFloat(medicare) + parseFloat(retirement)).toFixed(2);
+    const netPay = (parseFloat(grossPay) - parseFloat(totalDeductions)).toFixed(2);
+    
+    ctx.strokeStyle = '#CBD5E1';
+    ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(W - 40, y); ctx.stroke();
+    y += 18;
+    ctx.font = 'bold 13px Arial, sans-serif';
+    ctx.fillStyle = '#1E293B';
+    ctx.fillText('TOTAL DEDUCTIONS', col1 + 10, y);
+    ctx.fillText(`$${totalDeductions}`, col4, y);
+    y += 30;
+    
+    // Net pay highlight box
+    ctx.fillStyle = '#F0FDF4';
+    ctx.fillRect(40, y - 5, W - 80, 30);
+    ctx.strokeStyle = '#86EFAC';
+    ctx.strokeRect(40, y - 5, W - 80, 30);
+    ctx.fillStyle = '#166534';
+    ctx.font = 'bold 15px Arial, sans-serif';
+    ctx.fillText('NET PAY', col1 + 10, y + 14);
+    ctx.fillText(`$${netPay}`, col4, y + 14);
+    y += 50;
+    
+    // YTD Summary
+    ctx.fillStyle = '#1E293B';
+    ctx.font = 'bold 13px Arial, sans-serif';
+    ctx.fillText('YEAR-TO-DATE SUMMARY', 40, y);
+    y += 20;
+    const monthNum = now.getMonth() + 1;
+    const ytdGross = (parseFloat(grossPay) * monthNum).toFixed(2);
+    const ytdDeductions = (parseFloat(totalDeductions) * monthNum).toFixed(2);
+    const ytdNet = (parseFloat(netPay) * monthNum).toFixed(2);
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillStyle = '#334155';
+    ctx.fillText(`YTD Gross: $${ytdGross}`, 55, y);
+    ctx.fillText(`YTD Deductions: $${ytdDeductions}`, 300, y);
+    ctx.fillText(`YTD Net: $${ytdNet}`, 550, y);
+    
+    // Footer
+    y = H - 50;
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '10px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('This is an official pay statement. Please retain for your records.', W / 2, y);
+    ctx.fillText(`Document ID: ${generateBarcode()} | Generated: ${now.toISOString().split('T')[0]}`, W / 2, y + 16);
+    
+    const pngBuffer = canvas.toBuffer('image/png');
+    global.emitLog?.(`✅ Payslip generated (PNG: ${(pngBuffer.length / 1024).toFixed(2)}KB)`);
+    return pngBuffer;
+}
+
+/**
+ * Generate a teacher ID card as PNG buffer
+ */
+async function generateTeacherCard(teacherInfo, options = {}) {
+    global.emitLog?.('📸 Generating Faculty ID Card locally (PNG)...');
+    
+    const { UNIVERSITIES } = require('./universities-data');
+    const universities = UNIVERSITIES.map(u => u.name);
+    const selectedUniversity = teacherInfo.university || universities[Math.floor(Math.random() * universities.length)];
+    const universityColor = getUniversityColor(selectedUniversity);
+    const universityObj = UNIVERSITIES.find(u => u.name === selectedUniversity);
+    const shortName = universityObj?.shortName || selectedUniversity.split(' ')[0];
+    
     global.emitLog?.(`🎓 Faculty card for: ${selectedUniversity}`);
     
-    return new Promise((resolve, reject) => {
-        try {
-            const doc = new PDFDocument({
-                size: [350, 220],
-                margins: { top: 10, bottom: 10, left: 10, right: 10 }
-            });
-            
-            const chunks = [];
-            doc.on('data', chunk => chunks.push(chunk));
-            doc.on('end', () => {
-                const pdfBuffer = Buffer.concat(chunks);
-                global.emitLog?.(`✅ Faculty ID Card generated (PDF: ${(pdfBuffer.length / 1024).toFixed(2)}KB)`);
-                resolve(pdfBuffer);
-            });
-            doc.on('error', reject);
-            
-            // Header bar
-            doc.rect(0, 0, 350, 50).fill(universityColor);
-            
-            // University name
-            doc.fontSize(12)
-               .fill('#FFFFFF')
-               .text(selectedUniversity.toUpperCase(), 10, 12, {
-                   width: 330,
-                   align: 'center'
-               });
-            
-            // "FACULTY ID" label
-            doc.fontSize(10)
-               .text('FACULTY IDENTIFICATION CARD', 10, 32, {
-                   width: 330,
-                   align: 'center'
-               });
-            
-            // Photo placeholder
-            doc.rect(15, 60, 80, 100).fill('#E5E7EB');
-            doc.fontSize(8)
-               .fill('#6B7280')
-               .text('PHOTO', 40, 105);
-            
-            // Faculty info
-            const infoX = 110;
-            let infoY = 65;
-            
-            doc.fontSize(10).fill('#1F2937');
-            
-            doc.text('NAME:', infoX, infoY);
-            doc.font('Helvetica-Bold').text(teacherInfo.fullName || 'Jane Doe', infoX + 45, infoY);
-            doc.font('Helvetica');
-            
-            infoY += 20;
-            doc.text('ID:', infoX, infoY);
-            doc.font('Helvetica-Bold').text(teacherInfo.employeeId || 'E-1234567', infoX + 45, infoY);
-            doc.font('Helvetica');
-            
-            infoY += 20;
-            doc.text('TITLE:', infoX, infoY);
-            doc.text('Professor', infoX + 45, infoY);
-            
-            infoY += 20;
-            doc.text('DEPT:', infoX, infoY);
-            doc.text('Academic Affairs', infoX + 45, infoY);
-            
-            infoY += 20;
-            doc.text('STATUS:', infoX, infoY);
-            doc.fill('#059669').text('ACTIVE FACULTY', infoX + 45, infoY);
-            
-            // Barcode area
-            doc.rect(15, 175, 320, 35).fill('#F3F4F6');
-            
-            let barcodeX = 25;
-            for (let i = 0; i < 40; i++) {
-                const width = Math.random() > 0.5 ? 2 : 4;
-                const height = 20 + Math.random() * 5;
-                doc.rect(barcodeX, 180, width, height).fill('#000000');
-                barcodeX += width + 2 + Math.floor(Math.random() * 3);
-                if (barcodeX > 320) break;
-            }
-            
-            doc.fontSize(7)
-               .fill('#374151')
-               .text(generateBarcode(), 15, 202, { width: 320, align: 'center' });
-            
-            doc.end();
-        } catch (error) {
-            reject(error);
-        }
-    });
+    const W = 700, H = 440;
+    const canvas = createCanvas(W, H);
+    const ctx = canvas.getContext('2d');
+    
+    // Background
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, W, H);
+    
+    // Header bar
+    ctx.fillStyle = universityColor;
+    ctx.fillRect(0, 0, W, 80);
+    
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 20px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(selectedUniversity.toUpperCase(), W / 2, 35);
+    ctx.font = '13px Arial, sans-serif';
+    ctx.fillText('FACULTY IDENTIFICATION CARD', W / 2, 60);
+    
+    // Accent line
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(0, 80, W, 4);
+    
+    // Photo placeholder
+    const photoX = 30, photoY = 100, photoW = 130, photoH = 170;
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillRect(photoX, photoY, photoW, photoH);
+    ctx.strokeStyle = '#CBD5E1';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(photoX, photoY, photoW, photoH);
+    
+    ctx.fillStyle = '#94A3B8';
+    ctx.beginPath();
+    ctx.arc(photoX + photoW/2, photoY + 55, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(photoX + photoW/2, photoY + 140, 45, 35, 0, Math.PI, 0, true);
+    ctx.fill();
+    
+    // Faculty info
+    const infoX = 190;
+    let infoY = 115;
+    ctx.textAlign = 'left';
+    
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('FULL NAME', infoX, infoY);
+    infoY += 18;
+    ctx.fillStyle = '#1E293B';
+    ctx.font = 'bold 18px Arial, sans-serif';
+    ctx.fillText(teacherInfo.fullName || 'Jane Doe', infoX, infoY);
+    
+    infoY += 35;
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('EMPLOYEE ID', infoX, infoY);
+    infoY += 18;
+    ctx.fillStyle = '#1E293B';
+    ctx.font = 'bold 16px Arial, sans-serif';
+    ctx.fillText(teacherInfo.employeeId || 'E-1234567', infoX, infoY);
+    
+    infoY += 35;
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('POSITION', infoX, infoY);
+    infoY += 18;
+    ctx.fillStyle = '#1E293B';
+    ctx.font = '15px Arial, sans-serif';
+    ctx.fillText('Professor', infoX, infoY);
+    
+    // Right column
+    const col2X = 440;
+    let col2Y = 115;
+    
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('DEPARTMENT', col2X, col2Y);
+    col2Y += 18;
+    ctx.fillStyle = '#1E293B';
+    ctx.font = '15px Arial, sans-serif';
+    ctx.fillText('Academic Affairs', col2X, col2Y);
+    
+    col2Y += 35;
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('STATUS', col2X, col2Y);
+    col2Y += 18;
+    ctx.fillStyle = '#059669';
+    ctx.font = 'bold 15px Arial, sans-serif';
+    ctx.fillText('ACTIVE FACULTY', col2X, col2Y);
+    
+    col2Y += 35;
+    ctx.fillStyle = '#64748B';
+    ctx.font = '12px Arial, sans-serif';
+    ctx.fillText('ACADEMIC YEAR', col2X, col2Y);
+    col2Y += 18;
+    const now = new Date();
+    ctx.fillStyle = '#1E293B';
+    ctx.font = '14px Arial, sans-serif';
+    ctx.fillText(`${now.getFullYear()}-${now.getFullYear() + 1}`, col2X, col2Y);
+    
+    // Bottom section
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fillRect(0, 340, W, 100);
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillRect(0, 340, W, 1);
+    
+    // Barcode
+    let barcodeX = 50;
+    for (let i = 0; i < 60; i++) {
+        const w = Math.random() > 0.5 ? 2 : 4;
+        const h = 40 + Math.random() * 8;
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(barcodeX, 358, w, h);
+        barcodeX += w + 1 + Math.floor(Math.random() * 3);
+        if (barcodeX > 350) break;
+    }
+    
+    ctx.fillStyle = '#475569';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(generateBarcode(), 200, 418);
+    
+    ctx.fillStyle = universityColor;
+    ctx.font = 'bold 28px Arial, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(shortName.toUpperCase(), W - 40, 390);
+    ctx.font = '11px Arial, sans-serif';
+    ctx.fillStyle = '#64748B';
+    ctx.fillText(universityObj?.address || '', W - 40, 415);
+    
+    const pngBuffer = canvas.toBuffer('image/png');
+    global.emitLog?.(`✅ Faculty ID Card generated (PNG: ${(pngBuffer.length / 1024).toFixed(2)}KB)`);
+    return pngBuffer;
 }
 
 /**
