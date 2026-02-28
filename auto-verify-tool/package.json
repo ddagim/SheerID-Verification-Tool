@@ -13,7 +13,9 @@
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "faker": "^5.5.3",
+    "https-proxy-agent": "^7.0.6",
     "pdfkit": "^0.17.2",
-    "puppeteer": "^21.5.0"
+    "puppeteer": "^21.5.0",
+    "socks-proxy-agent": "^8.0.5"
   }
 }

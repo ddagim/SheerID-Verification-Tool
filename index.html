@@ -553,6 +553,25 @@
           <input id="urlInput" type="url" placeholder="https://services.sheerid.com/verify/...">
           <button id="btnVerify">VERIFY NOW</button>
         </div>
+
+        <!-- Proxy Configuration -->
+        <div style="margin-top: 16px;">
+          <details id="proxyDetails">
+            <summary style="cursor: pointer; font-family: var(--font-mono); font-size: 12px; color: #888; user-select: none;">
+              🌐 Proxy Settings <span id="proxyBadge" style="font-size: 10px; padding: 2px 8px; border-radius: 99px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: #888; margin-left: 8px;">No proxies</span>
+            </summary>
+            <div style="margin-top: 12px; padding: 16px; background: rgba(0,0,0,0.3); border-radius: 12px; border: 1px solid var(--glass-border);">
+              <div style="font-family: var(--font-mono); font-size: 11px; color: #888; margin-bottom: 8px;">Paste proxy list (one per line: <code style='background:rgba(255,255,255,0.1);padding:1px 4px;border-radius:3px;font-size:10px;'>host:port:user:pass</code>)</div>
+              <textarea id="proxyInput" rows="4" placeholder="host:port:username:password&#10;host:port:username:password" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: #fff; font-family: var(--font-mono); font-size: 11px; resize: vertical; outline: none;"></textarea>
+              <div style="display: flex; gap: 8px; margin-top: 8px;">
+                <button id="btnLoadProxies" style="flex: 1; height: 36px; font-size: 12px; padding: 0 16px; background: rgba(59,130,246,0.2); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); border-radius: 8px;">📥 Load Proxies</button>
+                <button id="btnTestProxy" style="flex: 1; height: 36px; font-size: 12px; padding: 0 16px; background: rgba(74,222,128,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); border-radius: 8px;">🧪 Test Random</button>
+                <button id="btnClearProxies" style="height: 36px; font-size: 12px; padding: 0 16px; background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 8px;">🗑️ Clear</button>
+              </div>
+              <div id="proxyStatus" style="margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: #888; min-height: 16px;"></div>
+            </div>
+          </details>
+        </div>
         <div id="status" style="margin-top: 16px; font-family: var(--font-mono); font-size: 13px; min-height: 20px;">
         </div>
         <!-- Progress Log Panel -->
@@ -735,6 +754,98 @@
     urlInput.addEventListener('keypress', function (e) {
       if (e.key === 'Enter') { verifyBtn.click(); }
     });
+
+    // ============== PROXY MANAGEMENT ==============
+    const proxyInput = document.getElementById('proxyInput');
+    const proxyBadge = document.getElementById('proxyBadge');
+    const proxyStatusDiv = document.getElementById('proxyStatus');
+    const btnLoadProxies = document.getElementById('btnLoadProxies');
+    const btnTestProxy = document.getElementById('btnTestProxy');
+    const btnClearProxies = document.getElementById('btnClearProxies');
+
+    async function updateProxyBadge() {
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/proxies`);
+        const data = await resp.json();
+        if (data.total > 0) {
+          proxyBadge.textContent = `${data.available}/${data.total} active`;
+          proxyBadge.style.color = '#4ade80';
+          proxyBadge.style.borderColor = 'rgba(74,222,128,0.3)';
+          proxyBadge.style.background = 'rgba(74,222,128,0.1)';
+        } else {
+          proxyBadge.textContent = 'No proxies';
+          proxyBadge.style.color = '#888';
+          proxyBadge.style.borderColor = 'var(--glass-border)';
+          proxyBadge.style.background = 'rgba(255,255,255,0.05)';
+        }
+      } catch (e) { /* silent */ }
+    }
+
+    btnLoadProxies.addEventListener('click', async () => {
+      const proxies = proxyInput.value.trim();
+      if (!proxies) {
+        proxyStatusDiv.textContent = '⚠️ Paste proxy list first';
+        proxyStatusDiv.style.color = '#fbbf24';
+        return;
+      }
+      proxyStatusDiv.textContent = '⏳ Loading proxies...';
+      proxyStatusDiv.style.color = '#60a5fa';
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/proxies`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proxies })
+        });
+        const data = await resp.json();
+        if (data.success) {
+          proxyStatusDiv.textContent = `✅ Loaded ${data.loaded} proxies`;
+          proxyStatusDiv.style.color = '#4ade80';
+        } else {
+          proxyStatusDiv.textContent = `❌ ${data.error}`;
+          proxyStatusDiv.style.color = '#ef4444';
+        }
+        updateProxyBadge();
+      } catch (e) {
+        proxyStatusDiv.textContent = `❌ ${e.message}`;
+        proxyStatusDiv.style.color = '#ef4444';
+      }
+    });
+
+    btnTestProxy.addEventListener('click', async () => {
+      proxyStatusDiv.textContent = '⏳ Testing proxy...';
+      proxyStatusDiv.style.color = '#60a5fa';
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/proxies/test`);
+        const data = await resp.json();
+        if (data.working) {
+          proxyStatusDiv.textContent = `✅ Proxy ${data.proxy} works! IP: ${data.ip}`;
+          proxyStatusDiv.style.color = '#4ade80';
+        } else {
+          proxyStatusDiv.textContent = `❌ Proxy ${data.proxy} failed: ${data.error}`;
+          proxyStatusDiv.style.color = '#ef4444';
+        }
+        updateProxyBadge();
+      } catch (e) {
+        proxyStatusDiv.textContent = `❌ ${e.message}`;
+        proxyStatusDiv.style.color = '#ef4444';
+      }
+    });
+
+    btnClearProxies.addEventListener('click', async () => {
+      try {
+        await fetch(`${BACKEND_URL}/api/proxies`, { method: 'DELETE' });
+        proxyInput.value = '';
+        proxyStatusDiv.textContent = '🗑️ Proxies cleared';
+        proxyStatusDiv.style.color = '#888';
+        updateProxyBadge();
+      } catch (e) {
+        proxyStatusDiv.textContent = `❌ ${e.message}`;
+        proxyStatusDiv.style.color = '#ef4444';
+      }
+    });
+
+    // Check proxy status on page load
+    updateProxyBadge();
   </script>
 </body>
 

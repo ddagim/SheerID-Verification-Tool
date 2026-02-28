@@ -1,4 +1,4 @@
-const axios = global.axios || require('axios');
+const axiosBase = global.axios || require('axios');
 const crypto = require('crypto');
 const { generateStudentCard, generatePayslip, generateTeacherCard, generateDocumentsParallel, closeBrowser } = require('./generator');
 const faker = require('faker');
@@ -6,6 +6,33 @@ const PDFDocument = require('pdfkit');
 const { UNIVERSITIES, K12_SCHOOLS } = require('./universities-data');
 const fs = require('fs');
 const path = require('path');
+const { proxyManager } = require('./proxy-manager');
+
+// ============== PROXY-AWARE AXIOS WRAPPER ==============
+// Wraps axios so every request automatically uses the current proxy
+const axios = {
+    _getProxyConfig() {
+        if (proxyManager.count === 0) return {};
+        const proxy = proxyManager.getRandom();
+        if (!proxy) return {};
+        global._currentProxy = proxy; // track for success/fail marking
+        const config = proxyManager.getAxiosConfig(proxy);
+        global.emitLog?.(`🌐 Using proxy: ${proxy.host}:${proxy.port}`, 'info');
+        return config;
+    },
+    async get(url, config = {}) {
+        return axiosBase.get(url, { ...this._getProxyConfig(), ...config });
+    },
+    async post(url, data, config = {}) {
+        return axiosBase.post(url, data, { ...this._getProxyConfig(), ...config });
+    },
+    async put(url, data, config = {}) {
+        return axiosBase.put(url, data, { ...this._getProxyConfig(), ...config });
+    },
+    async delete(url, config = {}) {
+        return axiosBase.delete(url, { ...this._getProxyConfig(), ...config });
+    }
+};
 
 // ============== IMPROVEMENT: Success Rate Tracking ==============
 const verificationStats = {

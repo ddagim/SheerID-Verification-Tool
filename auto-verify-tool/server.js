@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const EventEmitter = require('events');
 const { verifySheerID } = require('./verifier');
+const { proxyManager } = require('./proxy-manager');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,6 +31,49 @@ app.use(bodyParser.json());
 // Health check (before static to ensure API works)
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'SheerID Verification API is running' });
+});
+
+// ============== PROXY MANAGEMENT API ==============
+
+// Load proxies from a list
+app.post('/api/proxies', (req, res) => {
+    const { proxies } = req.body;
+    if (!proxies || typeof proxies !== 'string') {
+        return res.status(400).json({ success: false, error: 'Provide "proxies" as a newline-separated string' });
+    }
+    const count = proxyManager.loadFromString(proxies);
+    console.log(`[PROXY] Loaded ${count} proxies`);
+    res.json({ success: true, loaded: count, available: proxyManager.availableCount });
+});
+
+// Get proxy status
+app.get('/api/proxies', (req, res) => {
+    res.json({
+        total: proxyManager.count,
+        available: proxyManager.availableCount,
+        failed: proxyManager.count - proxyManager.availableCount
+    });
+});
+
+// Test a random proxy
+app.get('/api/proxies/test', async (req, res) => {
+    if (proxyManager.count === 0) {
+        return res.json({ success: false, error: 'No proxies loaded' });
+    }
+    const proxy = proxyManager.getRandom();
+    const result = await proxyManager.testProxy(proxy);
+    if (result.working) {
+        proxyManager.markSuccess(proxy);
+    } else {
+        proxyManager.markFailed(proxy);
+    }
+    res.json(result);
+});
+
+// Clear all proxies
+app.delete('/api/proxies', (req, res) => {
+    proxyManager.loadFromArray([]);
+    res.json({ success: true, message: 'All proxies cleared' });
 });
 
 // Serve frontend
@@ -60,7 +104,13 @@ app.get('/api/logs', (req, res) => {
 
 // Verify endpoint with isolated session logging
 app.post('/api/verify', async (req, res) => {
-    const { url, type, sessionId } = req.body;
+    const { url, type, sessionId, proxy } = req.body;
+
+    // If a single proxy was sent with the request, load it temporarily
+    if (proxy && typeof proxy === 'string' && proxy.trim()) {
+        const loaded = proxyManager.loadFromString(proxy);
+        console.log(`[PROXY] Loaded ${loaded} proxy(ies) from verify request`);
+    }
 
     if (!url) {
         return res.status(400).json({ success: false, error: 'URL is required' });
